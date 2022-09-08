@@ -31,11 +31,11 @@ Minimal working example:
 .. code-block:: python
 
   # create quantum tree instance
-  from qiskit.utils import QuantumInstance
   from qtree.qtree import QTree
+  from qiskit.utils import QuantumInstance
   qtree = QTree(max_depth=1, quantum_instance=QuantumInstance(Aer.get_backend('aer_simulator_statevector')))
 
-  # create training data and fit classifier
+  # create simple training data and fit classifier
   import numpy as np
   X = np.array([[1,0,0], [0,1,0], [0,0,1]])
   y = np.array([[0,0], [0,1], [1,1]])
@@ -54,7 +54,7 @@ Demo notebooks can be found in the ``examples/`` directory.
 
 If you find this code useful in your research, please consider citing:
 
-.. code-block::
+.. code-block:: tex
 
     @article{Heese2022representationof,
              doi = {10.22331/q-2022-03-30-676},
