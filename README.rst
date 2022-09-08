@@ -33,8 +33,7 @@ Minimal working example:
   # create quantum tree instance
   from qiskit.utils import QuantumInstance
   from qtree.qtree import QTree
-  quantum_instance = QuantumInstance(Aer.get_backend('aer_simulator_statevector'))
-  qtree = QTree(max_depth=1, quantum_instance=quantum_instance)
+  qtree = QTree(max_depth=1, quantum_instance=QuantumInstance(Aer.get_backend('aer_simulator_statevector')))
 
   # create training data and fit classifier
   import numpy as np
@@ -49,7 +48,7 @@ Minimal working example:
 
 Documentation is available on `<https://qtree.readthedocs.io/en/latest>`_.
 
-Demo notebooks can be found in the `examples/` directory.
+Demo notebooks can be found in the ``examples/`` directory.
 
 📖 **Citation**
 
