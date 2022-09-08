@@ -10,6 +10,7 @@ from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.utils.validation import check_X_y, check_array, check_is_fitted
 from sklearn.utils import check_random_state
 from qiskit import Aer
+from qiskit.utils import QuantumInstance
 import logging
 from qtree.ctree import ClassicalTree
 from qtree.quant import QTreeCircuitManager
@@ -895,7 +896,8 @@ class QTree(QTreeBase):
     quantum_instance : qiskit.utils.QuantumInstance or None
         Qiskit quantum instance used for all calculations. Can be either a 
         simulator or an actual backend. If set to ``None``, use 
-        ``Aer.get_backend('aer_simulator_statevector')``. Defaults to ``None``.
+        ``QuantumInstance(Aer.get_backend('aer_simulator_statevector'))``. 
+        Defaults to ``None``.
         
     d_weight : float
         Hyperparameter of tree growth. Weight of the distance function for 
@@ -1057,7 +1059,7 @@ class QTree(QTreeBase):
                  logger=None):
         #
         if quantum_instance is None:
-            quantum_instance = Aer.get_backend('aer_simulator_statevector')
+            quantum_instance = QuantumInstance(Aer.get_backend('aer_simulator_statevector'))
         #
         if score_func is None:
             score_func = QTree.score_func_entropy
