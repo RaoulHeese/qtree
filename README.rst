@@ -1,6 +1,6 @@
-*****************************
-qtree: Quantum Decision Trees
-*****************************
+******************************
+Quantum Decision Trees (qtree)
+******************************
 
 .. image:: https://github.com/RaoulHeese/qtree/actions/workflows/tests.yml/badge.svg 
     :target: https://github.com/RaoulHeese/qtree/actions/workflows/tests.yml
