@@ -9,6 +9,7 @@ from sklearn.metrics import balanced_accuracy_score
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.utils.validation import check_X_y, check_array, check_is_fitted
 from sklearn.utils import check_random_state
+from qiskit import Aer
 import logging
 from qtree.ctree import ClassicalTree
 from qtree.quant import QTreeCircuitManager
@@ -891,9 +892,10 @@ class QTree(QTreeBase):
         Maximum depth of the decision tree. A tree of depth 0 consists only of 
         the root.
         
-    quantum_instance : qiskit.utils.QuantumInstance
+    quantum_instance : qiskit.utils.QuantumInstance or None
         Qiskit quantum instance used for all calculations. Can be either a 
-        simulator or an actual backend.
+        simulator or an actual backend. If set to ``None``, use 
+        ``Aer.get_backend('aer_simulator_statevector')``. Defaults to ``None``.
         
     d_weight : float
         Hyperparameter of tree growth. Weight of the distance function for 
@@ -1044,7 +1046,7 @@ class QTree(QTreeBase):
     """
     
     def __init__(self, max_depth, 
-                 quantum_instance,
+                 quantum_instance=None,
                  d_weight=1.0, s_weight=1.0, a_weight=1.0, pareto_fitness=False,
                  score_func=None, dist_func=None, acc_func=None, swap_func=None, mcswap_func=None, mct_func=None,
                  pop_size=10, cx_pb=.2, mut_pb=.2, mut_ind_pb=.2, select_tournsize=3, max_generations=10,
@@ -1053,6 +1055,9 @@ class QTree(QTreeBase):
                  evo_callback=None,
                  remove_inactive_qubits=True, eliminate_first_swap=False, simultaneous_circuit_evaluation=False, include_id=False, block_form=False, use_barriers=False,
                  logger=None):
+        #
+        if quantum_instance is None:
+            quantum_instance = Aer.get_backend('aer_simulator_statevector')
         #
         if score_func is None:
             score_func = QTree.score_func_entropy
