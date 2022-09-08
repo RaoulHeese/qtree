@@ -22,7 +22,7 @@ Install via ``pip`` or clone this repository. In order to use ``pip``, type:
 
 .. code-block:: sh
 
-    $ pip install qtree
+    $ pip install quantum-tree
 	
 **Usage**
 
