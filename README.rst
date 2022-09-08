@@ -32,16 +32,17 @@ Minimal working example:
 
   # create quantum tree instance
   from qtree.qtree import QTree
-  from qiskit.utils import QuantumInstance
-  qtree = QTree(max_depth=1, quantum_instance=QuantumInstance(Aer.get_backend('aer_simulator_statevector')))
+  qtree = QTree(max_depth=1)
 
-  # create simple training data and fit classifier
+  # create simple training data
   import numpy as np
-  X = np.array([[1,0,0], [0,1,0], [0,0,1]])
-  y = np.array([[0,0], [0,1], [1,1]])
+  X = np.array([[1,0,0], [0,1,0], [0,0,1]]) # features
+  y = np.array([[0,0], [0,1], [1,1]])       # labels
+  
+  # fit quantum tree
   qtree.fit(X, y)
 
-  # make prediction
+  # make quantum tree prediction
   qtree.predict([[0,0,1]])
   
 **Documentation**
