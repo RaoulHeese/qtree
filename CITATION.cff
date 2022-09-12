@@ -1,0 +1,27 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+- family-names: "Heese"
+  given-names: "Raoul"
+  orcid: "https://orcid.org/0000-0001-7479-3339"
+title: "QTree"
+version: 1.1
+date-released: 2022-09-09
+url: "https://github.com/RaoulHeese/qtree"
+preferred-citation:
+  type: article
+  authors:
+  - family-names: "Heese"
+    given-names: "Raoul"
+    orcid: "https://orcid.org/0000-0001-7479-3339"
+  - family-names: "Bickert"
+    given-names: "Patricia"
+  - family-names: "Niederle"
+    given-names: "Astrid Elisa"	
+  doi: "10.22331/q-2022-03-30-676"
+  journal: "Quantum"
+  month: 3
+  start: 676 # First page number
+  title: "Representation of binary classification trees with binary features by quantum circuits"
+  volume: 6
+  year: 2022
