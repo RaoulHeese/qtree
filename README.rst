@@ -10,8 +10,8 @@ Quantum Decision Trees (qtree)
     :target: https://qtree.readthedocs.io/en/latest/?badge=latest
     :alt: Documentation Status	
 	
-.. image:: https://img.shields.io/pypi/v/qtree
-    :target: https://pypi.org/project/qtree/
+.. image:: https://img.shields.io/pypi/v/quantum-tree
+    :target: https://pypi.org/project/quantum-tree/
     :alt: PyPI - Project
 	
 .. image:: https://img.shields.io/badge/license-MIT-lightgrey
