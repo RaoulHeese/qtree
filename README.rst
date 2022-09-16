@@ -20,8 +20,7 @@ Quantum Decision Trees (qtree)
 	
 This Python package implements quantum decision tree classifiers for binary data. The details of the method can be found in `Representation of binary classification trees with binary features by quantum circuits <https://doi.org/10.22331/q-2022-03-30-676>`_
 
-.. image:: https://raw.githubusercontent.com/RaoulHeese/pytseg/main/docs/source/_static/title.png
-    :target: https://doi.org/10.22331/q-2022-03-30-676
+.. image:: https://raw.githubusercontent.com/RaoulHeese/qtree/master/docs/source/_static/title.png
     :alt: Title
 
 **Installation**
