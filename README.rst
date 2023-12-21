@@ -78,3 +78,5 @@ If you find this code useful in your research, please consider citing:
              month = {3},
              year = {2022}
             }
+
+*This project is currently not under development and is not actively maintained.*
