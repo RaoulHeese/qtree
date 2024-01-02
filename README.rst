@@ -61,7 +61,7 @@ Demo notebooks can be found in the ``examples/`` directory.
 
 📖 **Citation**
 
-If you find this code useful in your research, please consider citing:
+If you find this code useful in your research, please consider citing `Representation of binary classification trees with binary features by quantum circuits <https://doi.org/10.22331/q-2022-03-30-676>`_:
 
 .. code-block:: tex
 
