@@ -31,6 +31,8 @@ Install via ``pip`` or clone this repository. In order to use ``pip``, type:
 .. code-block:: sh
 
     $ pip install quantum-tree
+
+The package is tested with Python 3.8 and Python 3.9.
 	
 🌳 **Usage**
 
