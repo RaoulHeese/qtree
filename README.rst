@@ -32,7 +32,7 @@ Install via ``pip`` or clone this repository. In order to use ``pip``, type:
 
     $ pip install quantum-tree
 	
-**Usage**
+🌳 **Usage**
 
 Minimal working example:
 
