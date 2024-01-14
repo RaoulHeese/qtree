@@ -2,3 +2,4 @@ numpy
 deap
 scikit-learn
 qiskit
+qiskit_aer
