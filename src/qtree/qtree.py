@@ -9,18 +9,15 @@ from sklearn.metrics import balanced_accuracy_score
 from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.utils.validation import check_X_y, check_array, check_is_fitted
 from sklearn.utils import check_random_state
-from qiskit import Aer
-from qiskit.utils import QuantumInstance
+from qiskit_aer import AerSimulator
 import logging
 from qtree.ctree import ClassicalTree
 from qtree.quant import QTreeCircuitManager
 
-
-creator.create("FitnessMaxMCO", base.Fitness, weights=(1.0,1.0,1.0)) # positive: maximize, negative: minimize
-creator.create("FitnessMax", base.Fitness, weights=(1.0,)) # positive: maximize, negative: minimize
+creator.create("FitnessMaxMCO", base.Fitness, weights=(1.0, 1.0, 1.0))  # positive: maximize, negative: minimize
+creator.create("FitnessMax", base.Fitness, weights=(1.0,))  # positive: maximize, negative: minimize
 creator.create("IndividualMCO", list, fitness=creator.FitnessMaxMCO)
 creator.create("Individual", list, fitness=creator.FitnessMax)
-
 
 default_logger = logging.getLogger(__name__)
 default_logger.setLevel(logging.WARNING)
@@ -36,8 +33,8 @@ class QTreeBase(BaseEstimator, ClassifierMixin):
         Maximum depth of the decision tree. A tree of depth 0 consists only of 
         the root.
         
-    quantum_instance : qiskit.utils.QuantumInstance
-        Qiskit quantum instance used for all calculations. Can be either a 
+    quantum_backend : qiskit.providers.Backend
+        Qiskit quantum backend used for all calculations. Can be either a
         simulator or an actual backend.
         
     d_weight : float
@@ -182,24 +179,25 @@ class QTreeBase(BaseEstimator, ClassifierMixin):
         used.
     """
 
-    def __init__(self, max_depth, 
-                 quantum_instance,
+    def __init__(self, max_depth,
+                 quantum_backend,
                  d_weight, s_weight, a_weight, pareto_fitness,
                  score_func, dist_func, acc_func, swap_func, mcswap_func, mct_func,
                  pop_size, cx_pb, mut_pb, mut_ind_pb, select_tournsize, max_generations,
                  reuse_G_calc, mean_fits,
                  random_state,
                  evo_callback,
-                 remove_inactive_qubits, eliminate_first_swap, simultaneous_circuit_evaluation, include_id, block_form, use_barriers,
+                 remove_inactive_qubits, eliminate_first_swap, simultaneous_circuit_evaluation, include_id, block_form,
+                 use_barriers,
                  logger):
         self.max_depth = max_depth
-        self.quantum_instance = quantum_instance
+        self.quantum_backend = quantum_backend
         self.d_weight = d_weight
         self.s_weight = s_weight
         self.a_weight = a_weight
         self.pareto_fitness = pareto_fitness
         self.score_func = score_func  # e.g. entropy   
-        self.dist_func = dist_func # e.g. proba_dist_norm
+        self.dist_func = dist_func  # e.g. proba_dist_norm
         self.acc_func = acc_func  # e.g. acc_balanced   
         self.swap_func = swap_func
         self.mcswap_func = mcswap_func
@@ -212,7 +210,7 @@ class QTreeBase(BaseEstimator, ClassifierMixin):
         self.max_generations = max_generations
         self.reuse_G_calc = reuse_G_calc
         self.mean_fits = mean_fits
-        self.random_state = random_state   
+        self.random_state = random_state
         self.evo_callback = evo_callback
         self.remove_inactive_qubits = remove_inactive_qubits
         self.eliminate_first_swap = eliminate_first_swap
@@ -235,12 +233,13 @@ class QTreeBase(BaseEstimator, ClassifierMixin):
     def check_query_probabilities(query_probabilities, Nx):
         """Check probabilistic queries (in form of dictionaries) for predictions.
         """
-        
+
         assert type(query_probabilities) is dict, 'invalid query type'
-        assert all([type(key) is str and len(key) == Nx and set(key) <= set('01') for key in query_probabilities.keys()]), 'invalied query keys'
+        assert all([type(key) is str and len(key) == Nx and set(key) <= set('01') for key in
+                    query_probabilities.keys()]), 'invalied query keys'
         assert sum(query_probabilities.values()) == 1.0, 'invalid query probabilities'
         return query_probabilities
-    
+
     @staticmethod
     def check_bool_array(a):
         """Check and convert boolean array.
@@ -248,26 +247,30 @@ class QTreeBase(BaseEstimator, ClassifierMixin):
 
         a = np.asarray(a).astype(bool)
         return a
-    
+
     @staticmethod
     def check_input_features(X, _X):
         """Check and convert input features for predictions.
         """
-        
+
         X = QTreeBase.check_bool_array(X)
         X = check_array(X)
         assert X.shape[1] == _X.shape[1], 'invalid feature dimensions'
         return X
-    
-    def _grow_ga(self, X, y, d_weight, s_weight, a_weight, pareto_fitness, max_depth, rng, pop_size, cx_pb, mut_pb, mut_ind_pb, select_tournsize, max_generations, reuse_G_calc, remove_inactive_qubits, eliminate_first_swap, include_id, block_form, use_barriers, simultaneous_circuit_evaluation, mean_fits):
+
+    def _grow_ga(self, X, y, d_weight, s_weight, a_weight, pareto_fitness, max_depth, rng, pop_size, cx_pb, mut_pb,
+                 mut_ind_pb, select_tournsize, max_generations, reuse_G_calc, remove_inactive_qubits,
+                 eliminate_first_swap, include_id, block_form, use_barriers, simultaneous_circuit_evaluation,
+                 mean_fits):
         # GA to find best decision configuration
-        
+
         # Set basic options
-        Nx = X.shape[1]   
-        Ny = y.shape[1]   
-        select_k = pop_size-1
+        Nx = X.shape[1]
+        Ny = y.shape[1]
+        select_k = pop_size - 1
         fresh_random_seed = rng.randint(np.iinfo('int32').min, np.iinfo('int32').max)
         random.seed(fresh_random_seed)
+
         def G_flat_to_G(G_flat, ind_lengths):
             G_flat = G_flat.copy()
             G = []
@@ -276,56 +279,62 @@ class QTreeBase(BaseEstimator, ClassifierMixin):
                 G_flat = G_flat[length:]
                 G.append(g)
             return G
-    
-        assert select_k == pop_size-1 and select_tournsize < pop_size-1
-        
+
+        assert select_k == pop_size - 1 and select_tournsize < pop_size - 1
+
         # 1) The genetic representation is a list of integers: G_flat
-        ind_lengths = [2**(d) for d in range(max_depth+1)]
-        ind_min_values = [d for d in range(max_depth+1)]
-        ind_max_values = [Nx-1 for _ in range(max_depth+1)]
-        
+        ind_lengths = [2 ** (d) for d in range(max_depth + 1)]
+        ind_min_values = [d for d in range(max_depth + 1)]
+        ind_max_values = [Nx - 1 for _ in range(max_depth + 1)]
+
         # 2) The fitnes function is _calc_fitness
-        G_flat_score_dict = {} # memory: store fitness function results (to avoid recalculations)
+        G_flat_score_dict = {}  # memory: store fitness function results (to avoid recalculations)
         Q_evaluations = []
-        
+
         def fitness_formater(fitness_values):
             if len(fitness_values) > 0:
                 fit_str = "({})".format(",".join(["{:.4f}".format(v) for v in fitness_values]))
             else:
                 fit_str = ""
             return fit_str
-        
+
         def fitness_calculator(path_result_dict, G):
             path_result_dict_exact = self._get_path_result_dict_exact(path_result_dict, G, X, y)
             tree_dict, _, _ = self._to_tree_dict(G, path_result_dict)
             y_pred = self._cl_tree_prediction(tree_dict, X, y)
             y_true = y.copy()
-            fitness_tuple = self._calc_fitness(path_result_dict, path_result_dict_exact, y_pred, y_true, d_weight, s_weight, a_weight) # calc fitness
+            fitness_tuple = self._calc_fitness(path_result_dict, path_result_dict_exact, y_pred, y_true, d_weight,
+                                               s_weight, a_weight)  # calc fitness
             if pareto_fitness:
                 fitness_tuple = tuple(fitness_tuple)
             else:
                 fitness_tuple = (float(np.sum(fitness_tuple)),)
-            return fitness_tuple # treat fitness as tuple for return value
-        
-        def fitness_function(individual): # simultaneous_circuit_evaluation == False
+            return fitness_tuple  # treat fitness as tuple for return value
+
+        def fitness_function(individual):  # simultaneous_circuit_evaluation == False
             self.lg.debug("[fitness_function] Fitness calculation of one candidate:")
             G_flat = individual.copy()
-            G = G_flat_to_G(G_flat, ind_lengths)            
+            G = G_flat_to_G(G_flat, ind_lengths)
             tG_flat = tuple(G_flat)
-            if tG_flat in G_flat_score_dict and reuse_G_calc: # recall from memory
-                self.lg.debug("Evaluate candidate: {} (repetition #{})".format(G, G_flat_score_dict[tG_flat]['count']+1))
+            if tG_flat in G_flat_score_dict and reuse_G_calc:  # recall from memory
+                self.lg.debug(
+                    "Evaluate candidate: {} (repetition #{})".format(G, G_flat_score_dict[tG_flat]['count'] + 1))
                 fitness = G_flat_score_dict[tG_flat]['fitness']
                 G_flat_score_dict[tG_flat]['count'] += 1
-            else: # new, save in memory
-                self.lg.debug("Run 1 quantum job (G={}):".format(G))                
-                path_result_dict = self._evaluate_G_list([G], Nx, Ny, init=(X,y), measure_y=True, measure_all_x=False, remove_inactive_qubits=remove_inactive_qubits, eliminate_first_swap=eliminate_first_swap, include_id=include_id, block_form=block_form, use_barriers=use_barriers)[0]
+            else:  # new, save in memory
+                self.lg.debug("Run 1 quantum job (G={}):".format(G))
+                path_result_dict = self._evaluate_G_list([G], Nx, Ny, init=(X, y), measure_y=True, measure_all_x=False,
+                                                         remove_inactive_qubits=remove_inactive_qubits,
+                                                         eliminate_first_swap=eliminate_first_swap,
+                                                         include_id=include_id, block_form=block_form,
+                                                         use_barriers=use_barriers)[0]
                 fitness = fitness_calculator(path_result_dict, G)
                 G_flat_score_dict[tG_flat] = {'fitness': fitness, 'count': 1}
                 Q_evaluations.append(tG_flat)
             self.lg.debug("G={}, fitness = {}".format(G, fitness_formater(fitness)))
-            return fitness # return fitness (as tuple)
-        
-        def fitness_function_map(ind_list): # simultaneous_circuit_evaluation == True
+            return fitness  # return fitness (as tuple)
+
+        def fitness_function_map(ind_list):  # simultaneous_circuit_evaluation == True
             self.lg.debug("[fitness_function_map] Fitness calculation: evaluate {} candidates:".format(len(ind_list)))
             self.lg.debug("Prepare evaluation...")
             fitness_job_list = []
@@ -339,25 +348,31 @@ class QTreeBase(BaseEstimator, ClassifierMixin):
                     run_job = False
                     fetch_score_from_idx = None
                     fitness = G_flat_score_dict[tG_flat]['fitness']
-                    n_reuse += 1 
+                    n_reuse += 1
                 elif reuse_G_calc and tG_flat in [fj['tG_flat'] for fj in fitness_job_list]:
                     run_job = False
                     fetch_score_from_idx = [fj['tG_flat'] for fj in fitness_job_list].index(tG_flat)
                     fitness = None
-                    n_reuse += 1 
+                    n_reuse += 1
                 else:
-                    run_job = True 
+                    run_job = True
                     fetch_score_from_idx = None
                     fitness = None
                     n_new += 1
-                fitness_job = dict(G=G, G_flat=G_flat, tG_flat=tG_flat, run_job=run_job, fetch_score_from_idx=fetch_score_from_idx, fitness=fitness)
+                fitness_job = dict(G=G, G_flat=G_flat, tG_flat=tG_flat, run_job=run_job,
+                                   fetch_score_from_idx=fetch_score_from_idx, fitness=fitness)
                 fitness_job_list.append(fitness_job)
             self.lg.debug("Peparation complete: {} new fitnesses, {} reusable fitnesses".format(n_new, n_reuse))
             G_list = [fj['G'] for fj in fitness_job_list if fj['run_job']]
-            fj_indices = [idx for idx,fj in enumerate(fitness_job_list) if fj['run_job']]
+            fj_indices = [idx for idx, fj in enumerate(fitness_job_list) if fj['run_job']]
             assert len(G_list) == len(fj_indices)
             self.lg.debug("Run {} quantum jobs:".format(len(G_list)))
-            path_result_dict_list = self._evaluate_G_list(G_list, Nx, Ny, init=(X,y), measure_y=True, measure_all_x=False, remove_inactive_qubits=remove_inactive_qubits, eliminate_first_swap=eliminate_first_swap, include_id=include_id, block_form=block_form, use_barriers=use_barriers)
+            path_result_dict_list = self._evaluate_G_list(G_list, Nx, Ny, init=(X, y), measure_y=True,
+                                                          measure_all_x=False,
+                                                          remove_inactive_qubits=remove_inactive_qubits,
+                                                          eliminate_first_swap=eliminate_first_swap,
+                                                          include_id=include_id, block_form=block_form,
+                                                          use_barriers=use_barriers)
             self.lg.debug("Collect results...")
             fitness_list = []
             for idx, G, path_result_dict in zip(fj_indices, G_list, path_result_dict_list):
@@ -375,9 +390,11 @@ class QTreeBase(BaseEstimator, ClassifierMixin):
                     fitness_job_list[idx]['fitness'] = fitness_job_list[fetch_score_from_idx]['fitness']
                 fitness = fitness_job_list[idx]['fitness']
                 fitness_list.append(fitness)
-                self.lg.debug("fitness calc #{:d}: G={}, new={}, fitness={}".format(idx+1, fitness_job_list[idx]['G'], fitness_job_list[idx]['run_job'], fitness_formater(fitness)))
-            return fitness_list # return fitnesses (as a list of tuples)
-        
+                self.lg.debug("fitness calc #{:d}: G={}, new={}, fitness={}".format(idx + 1, fitness_job_list[idx]['G'],
+                                                                                    fitness_job_list[idx]['run_job'],
+                                                                                    fitness_formater(fitness)))
+            return fitness_list  # return fitnesses (as a list of tuples)
+
         def calculate_fitnesses(ind_list, fitness_function_map, toolbox):
             self.lg.debug("[calculate_fitnesses]")
             if simultaneous_circuit_evaluation:
@@ -398,20 +415,29 @@ class QTreeBase(BaseEstimator, ClassifierMixin):
             self.lg.debug("fitness_data = {}".format(fitness_data))
             fitness_means, fitness_stds, fitness_counts = {}, {}, {}
             for k, v in fitness_data.items():
-                fitness_means[k] = tuple(np.mean(v,axis=0).tolist())
-                fitness_stds[k] = tuple(np.std(v,axis=0).tolist())
+                fitness_means[k] = tuple(np.mean(v, axis=0).tolist())
+                fitness_stds[k] = tuple(np.std(v, axis=0).tolist())
                 fitness_counts[k] = len(v)
             for idx, ind in enumerate(pop):
                 G_flat = ind.copy()
                 tG_flat = tuple(ind)
-                self.lg.debug("Candidate #{:d}: {}\n\t\t\t{} -> {} +- {}\t[x{:d}]".format(idx, G_flat_to_G(G_flat, ind_lengths), fitness_formater(ind.fitness.values), fitness_formater(fitness_means[tG_flat]), fitness_formater(fitness_stds[tG_flat]), fitness_counts[tG_flat]))
+                self.lg.debug(
+                    "Candidate #{:d}: {}\n\t\t\t{} -> {} +- {}\t[x{:d}]".format(idx, G_flat_to_G(G_flat, ind_lengths),
+                                                                                fitness_formater(ind.fitness.values),
+                                                                                fitness_formater(
+                                                                                    fitness_means[tG_flat]),
+                                                                                fitness_formater(fitness_stds[tG_flat]),
+                                                                                fitness_counts[tG_flat]))
                 ind.fitness.values = fitness_means[tG_flat]
             return pop
 
         # Setup GA defined by 1) and 2)
         ind_total_length = np.sum(ind_lengths)
-        ind_all_min_values = np.concatenate([[min_value]*length for length, min_value in zip(ind_lengths, ind_min_values)]).tolist()
-        ind_all_max_values = np.concatenate([[max_value]*length for length, max_value in zip(ind_lengths, ind_max_values)]).tolist()
+        ind_all_min_values = np.concatenate(
+            [[min_value] * length for length, min_value in zip(ind_lengths, ind_min_values)]).tolist()
+        ind_all_max_values = np.concatenate(
+            [[max_value] * length for length, max_value in zip(ind_lengths, ind_max_values)]).tolist()
+
         def genInd(icls, ind_lengths, ind_min_values, ind_max_values):
             G_flat = []
             for length, min_value, max_value in zip(ind_lengths, ind_min_values, ind_max_values):
@@ -419,21 +445,25 @@ class QTreeBase(BaseEstimator, ClassifierMixin):
                 G_flat += g
             self.lg.debug("New candidate: {}".format(G_flat_to_G(G_flat, ind_lengths)))
             return icls(G_flat)
-        toolbox = base.Toolbox() 
+
+        toolbox = base.Toolbox()
         if pareto_fitness:
-            creator_individual=creator.IndividualMCO
+            creator_individual = creator.IndividualMCO
         else:
-            creator_individual=creator.Individual  
+            creator_individual = creator.Individual
         toolbox.register('individual', genInd, creator_individual, ind_lengths, ind_min_values, ind_max_values)
-        toolbox.register("population", tools.initRepeat, list, toolbox.individual)    
-        toolbox.register("evaluate", fitness_function) # if simultaneous_circuit_evaluation == False 
-        toolbox.register("mate", tools.cxOnePoint) # https://deap.readthedocs.io/en/master/api/tools.html#deap.tools.cxOnePoint
-        toolbox.register("mutate", tools.mutUniformInt, low=ind_all_min_values, up=ind_all_max_values, indpb=mut_ind_pb) # https://deap.readthedocs.io/en/master/api/tools.html#deap.tools.mutUniformInt
-        toolbox.register("select", tools.selTournament, k=select_k, tournsize=select_tournsize) # https://deap.readthedocs.io/en/master/api/tools.html#deap.tools.selTournament  
+        toolbox.register("population", tools.initRepeat, list, toolbox.individual)
+        toolbox.register("evaluate", fitness_function)  # if simultaneous_circuit_evaluation == False
+        toolbox.register("mate",
+                         tools.cxOnePoint)  # https://deap.readthedocs.io/en/master/api/tools.html#deap.tools.cxOnePoint
+        toolbox.register("mutate", tools.mutUniformInt, low=ind_all_min_values, up=ind_all_max_values,
+                         indpb=mut_ind_pb)  # https://deap.readthedocs.io/en/master/api/tools.html#deap.tools.mutUniformInt
+        toolbox.register("select", tools.selTournament, k=select_k,
+                         tournsize=select_tournsize)  # https://deap.readthedocs.io/en/master/api/tools.html#deap.tools.selTournament
 
         self.lg.info("Start of evolution")
         pop = toolbox.population(n=pop_size)
-        
+
         # Evaluate the entire population
         self.lg.debug("Evaluation")
         fitnesses = calculate_fitnesses(pop, fitness_function_map, toolbox)
@@ -442,33 +472,36 @@ class QTreeBase(BaseEstimator, ClassifierMixin):
         self.lg.debug("Evaluated {} individuals".format(len(pop)))
         current_generation = 0
         best_fitnesses = []
-        
+
         # Callback
         if self.evo_callback is not None:
             self.evo_callback(current_generation, pop)
-      
+
         if pop_size > 1:
-        
+
             while current_generation < max_generations:
                 # A new generation
                 current_generation += 1
                 self.lg.debug("Generation {:2d}".format(current_generation))
                 for idx, candidate in enumerate(pop):
-                    self.lg.debug("Candidate #{}: {}\t{}".format(idx, G_flat_to_G(candidate, ind_lengths), fitness_formater(candidate.fitness.values)))
+                    self.lg.debug("Candidate #{}: {}\t{}".format(idx, G_flat_to_G(candidate, ind_lengths),
+                                                                 fitness_formater(candidate.fitness.values)))
 
                 # Select the champion from this generation
                 best_champ = toolbox.clone(tools.selBest(pop, 1))
-                self.lg.debug("Champion: {}\t{}".format(G_flat_to_G(best_champ[0], ind_lengths), fitness_formater(best_champ[0].fitness.values)))
-            
+                self.lg.debug("Champion: {}\t{}".format(G_flat_to_G(best_champ[0], ind_lengths),
+                                                        fitness_formater(best_champ[0].fitness.values)))
+
                 # Select the next generation individuals
                 offspring = toolbox.select(pop)
                 self.lg.debug("Selection")
                 for idx, candidate in enumerate(offspring):
-                    self.lg.debug("Selected candidate #{}: {}\t{}".format(idx, G_flat_to_G(candidate, ind_lengths), fitness_formater(candidate.fitness.values)))
-            
+                    self.lg.debug("Selected candidate #{}: {}\t{}".format(idx, G_flat_to_G(candidate, ind_lengths),
+                                                                          fitness_formater(candidate.fitness.values)))
+
                 # Clone the selected individuals
                 offspring = list(map(toolbox.clone, offspring))
-            
+
                 # Apply crossover on the offspring
                 self.lg.debug("Crossover")
                 crossover_idx = []
@@ -476,7 +509,8 @@ class QTreeBase(BaseEstimator, ClassifierMixin):
                 crossover_offspring_idx_1 = list(range(len(offspring)))[::2]
                 crossover_offspring_2 = offspring[1::2]
                 crossover_offspring_idx_2 = list(range(len(offspring)))[1::2]
-                for idx1, child1, idx2, child2 in zip(crossover_offspring_idx_1, crossover_offspring_1, crossover_offspring_idx_2, crossover_offspring_2):
+                for idx1, child1, idx2, child2 in zip(crossover_offspring_idx_1, crossover_offspring_1,
+                                                      crossover_offspring_idx_2, crossover_offspring_2):
                     # cross two individuals with probability CXPB
                     if ind_total_length > 1 and random.random() <= cx_pb:
                         toolbox.mate(child1, child2)
@@ -485,15 +519,21 @@ class QTreeBase(BaseEstimator, ClassifierMixin):
                         crossover_idx.append([idx1, idx2])
                 for idx, candidate in enumerate(offspring):
                     fs = fitness_formater(candidate.fitness.values)
-                    if idx in [idx for idx,_ in crossover_idx]:
+                    if idx in [idx for idx, _ in crossover_idx]:
                         mark = "*1"
-                    elif idx in [idx for _,idx in crossover_idx]:
+                    elif idx in [idx for _, idx in crossover_idx]:
                         mark = "*2"
                     else:
-                        mark = "  " 
-                    self.lg.debug("Crossovered candidate #{}{}: {}\t{}".format(idx, mark, G_flat_to_G(candidate, ind_lengths), fs))
-                self.lg.debug("Crossovers ({}: {}) vs. ({}: {}): {} ({})".format(len(crossover_offspring_idx_1), crossover_offspring_idx_1, len(crossover_offspring_idx_2), crossover_offspring_idx_2, len(crossover_idx), crossover_idx))
-            
+                        mark = "  "
+                    self.lg.debug(
+                        "Crossovered candidate #{}{}: {}\t{}".format(idx, mark, G_flat_to_G(candidate, ind_lengths),
+                                                                     fs))
+                self.lg.debug("Crossovers ({}: {}) vs. ({}: {}): {} ({})".format(len(crossover_offspring_idx_1),
+                                                                                 crossover_offspring_idx_1,
+                                                                                 len(crossover_offspring_idx_2),
+                                                                                 crossover_offspring_idx_2,
+                                                                                 len(crossover_idx), crossover_idx))
+
                 # Apply mutation on the offspring
                 self.lg.debug("Mutation")
                 mutation_idx = []
@@ -506,9 +546,10 @@ class QTreeBase(BaseEstimator, ClassifierMixin):
                 for idx, candidate in enumerate(offspring):
                     fs = fitness_formater(candidate.fitness.values)
                     mark = "*" if idx in mutation_idx else " "
-                    self.lg.debug("Mutated candidate #{}{}: {}\t{}".format(idx, mark, G_flat_to_G(candidate, ind_lengths), fs))
+                    self.lg.debug(
+                        "Mutated candidate #{}{}: {}\t{}".format(idx, mark, G_flat_to_G(candidate, ind_lengths), fs))
                 self.lg.debug("Mutations: {} ({})".format(len(mutation_idx), mutation_idx))
-            
+
                 # Evaluate the individuals with an invalid fitness
                 self.lg.debug("Evaluation")
                 invalid_ind = [ind for ind in offspring if not ind.fitness.valid]
@@ -516,17 +557,17 @@ class QTreeBase(BaseEstimator, ClassifierMixin):
                 for ind, fit in zip(invalid_ind, fitnesses):
                     ind.fitness.values = fit
                 self.lg.debug("Evaluated {} individuals".format(len(invalid_ind)))
-            
+
                 # The population is entirely replaced by the offspring and the champion of the last generation
                 pop[:] = offspring + best_champ
-                    
+
                 # Optionally agerage all fitnesses
                 if mean_fits:
                     pop = fitness_averaging(pop)
-            
+
                 # Gather all the fitnesses in one list and print the stats
                 fits = [ind.fitness.values for ind in pop]
-                fits_scalar = [np.sum(v) for v in fits] # sum over all tuples
+                fits_scalar = [np.sum(v) for v in fits]  # sum over all tuples
                 fits_scalar_worst = np.min(fits_scalar)
                 fits_scalar_best = np.max(fits_scalar)
                 fits_best_idx = np.argmax(fits_scalar)
@@ -538,54 +579,57 @@ class QTreeBase(BaseEstimator, ClassifierMixin):
                     else:
                         fit_scalar_improved = "\t(sum unchanged)"
                 else:
-                    fit_scalar_improved = "" # first generation
+                    fit_scalar_improved = ""  # first generation
                 self.lg.debug("Fitness summary (scalarized):")
                 self.lg.debug("Min: {:.5f}\t[worst]".format(fits_scalar_worst))
                 self.lg.debug("Max: {:.5f}\t[best]{}".format(fits_scalar_best, fit_scalar_improved))
                 self.lg.debug("Avg: {:.5f}".format(np.mean(fits_scalar)))
                 self.lg.debug("Std: {:.5f}".format(np.std(fits_scalar)))
                 self.lg.debug("Pop:", list(zip(pop, [fitness_formater(ind.fitness.values) for ind in pop])))
-                best_fitnesses.append(pop[fits_best_idx].fitness.values)                  
-                
+                best_fitnesses.append(pop[fits_best_idx].fitness.values)
+
                 # Callback
                 if self.evo_callback is not None:
                     self.evo_callback(current_generation, pop)
         else:
             assert pop_size == 1 and select_k == 0
-            self.lg.debug("Just perform a random choice since pop_size = 1 and thus select_k = 0 (i.e., selection of the empty set).")
-            
+            self.lg.debug(
+                "Just perform a random choice since pop_size = 1 and thus select_k = 0 (i.e., selection of the empty set).")
+
         self.lg.info("End of evolution")
-        
+
         # Summarize
         self.lg.debug("Final candidates:")
         for idx, candidate in enumerate(pop):
-            self.lg.debug("Candidate #{}: {}\t{}".format(idx, G_flat_to_G(candidate, ind_lengths), fitness_formater(candidate.fitness.values)))
+            self.lg.debug("Candidate #{}: {}\t{}".format(idx, G_flat_to_G(candidate, ind_lengths),
+                                                         fitness_formater(candidate.fitness.values)))
         self.lg.debug("G_flat_score_dict:\n{}".format(G_flat_score_dict))
         self.lg.debug("Q_evaluations ({}):\n{}".format(len(Q_evaluations), Q_evaluations))
-        self.lg.debug("Progress of best fitnesses:\n{}".format(", ".join([fitness_formater(f) for f in best_fitnesses])))
-        
+        self.lg.debug(
+            "Progress of best fitnesses:\n{}".format(", ".join([fitness_formater(f) for f in best_fitnesses])))
+
         self.lg.debug("Result")
-        
+
         # Select best individual
         G_flat_best = tools.selBest(pop, 1)[0]
         score_best = G_flat_best.fitness.values
-        G_best = G_flat_to_G(G_flat_best, ind_lengths) 
+        G_best = G_flat_to_G(G_flat_best, ind_lengths)
         self.lg.info("Best individual is {} with fitness {}".format(G_best, fitness_formater(score_best)))
-        
+
         return G_best
 
     def _process_counts(self, counts, Ny, current_depth, measure_y=True):
         path_count_dict = {}
         for key, count in counts.items():
             if measure_y:
-                path = tuple([int(key[-(i+1)]) for i in range(current_depth+1)])
+                path = tuple([int(key[-(i + 1)]) for i in range(current_depth + 1)])
                 yvals = [int(key[i]) for i in range(Ny)][::-1]
                 if path not in path_count_dict:
                     path_count_dict[path] = [[0, 0] for i in range(Ny)]
                 for i in range(Ny):
-                    path_count_dict[path][i][yvals[i]] += count #+!
+                    path_count_dict[path][i][yvals[i]] += count  # +!
             else:
-                path = tuple([int(key[-(i+1)]) for i in range(current_depth+1)])
+                path = tuple([int(key[-(i + 1)]) for i in range(current_depth + 1)])
                 path_count_dict[path] = count
         return path_count_dict
 
@@ -594,47 +638,53 @@ class QTreeBase(BaseEstimator, ClassifierMixin):
         total_counts = np.sum([path_counts for path_counts in path_count_dict.values()])
         for path, path_counts in path_count_dict.items():
             if measure_y:
-                total_path_counts = np.sum(path_counts)    
-                py_list = [] # one entry for all elements of y
-                S_list = [] # one entry for all elements of y
-                counts_list = [] # one entry for all elements of y
+                total_path_counts = np.sum(path_counts)
+                py_list = []  # one entry for all elements of y
+                S_list = []  # one entry for all elements of y
+                counts_list = []  # one entry for all elements of y
                 for i in range(Ny):
                     counts = path_count_dict[path][i]
                     counts_list.append(counts)
-                    py = np.array(counts)/np.sum(counts)  # [n_i^0(cl), n_i^1(cl)] / n_i(cl)
+                    py = np.array(counts) / np.sum(counts)  # [n_i^0(cl), n_i^1(cl)] / n_i(cl)
                     S = self._score_func(py)
                     py_list.append(py.tolist())
                     S_list.append(S)
-                p = total_path_counts/total_counts # n(cl) / N
-                path_result_dict[path] = dict(p=p, py_list=py_list, S_list=S_list, N=total_counts, counts=counts_list) # p = p(cl), py_list = [p(y_1|cl), ...], S_list=[S[p(y_1|cl)], ...]
+                p = total_path_counts / total_counts  # n(cl) / N
+                path_result_dict[path] = dict(p=p, py_list=py_list, S_list=S_list, N=total_counts,
+                                              counts=counts_list)  # p = p(cl), py_list = [p(y_1|cl), ...], S_list=[S[p(y_1|cl)], ...]
             else:
-                total_path_counts = np.sum(path_counts)    
-                p = total_path_counts/total_counts
-                path_result_dict[path] = dict(p=p, N=total_counts) # p = p(cl)
+                total_path_counts = np.sum(path_counts)
+                p = total_path_counts / total_counts
+                path_result_dict[path] = dict(p=p, N=total_counts)  # p = p(cl)
         return path_result_dict
-    
+
     def _process_path_count_dict_list(self, path_count_dict_list, Ny, measure_y=True):
         path_result_dict_list = []
         for path_count_dict in path_count_dict_list:
             path_result_dict = self._process_path_count_dict(path_count_dict, Ny, measure_y)
             path_result_dict_list.append(path_result_dict)
         return path_result_dict_list
-        
+
     def _evaluate_circuits(self, circ_list, current_depth_list, Ny, measure_y=True):
-        counts_list = self._cm.run_circuits(circ_list, self.quantum_instance)
+        counts_list = self._cm.run_circuits(circ_list, self.quantum_backend)
         path_count_dict_list = []
         for counts, current_depth in zip(counts_list, current_depth_list):
             path_count_dict = self._process_counts(counts, Ny, current_depth, measure_y)
-            path_count_dict_list.append(path_count_dict)    
+            path_count_dict_list.append(path_count_dict)
         return path_count_dict_list
-    
-    def _prepare_circ_from_G(self, G, Nx, Ny, init, measure_y, measure_all_x, remove_inactive_qubits=False, eliminate_first_swap=False, include_id=False, block_form=False, use_barriers=False):
-        self.lg.debug("Build circuit...")
-        circ, meta = self._cm.build_circuit(G, Nx, Ny, init, measure_y=measure_y, measure_all_x=measure_all_x, remove_inactive_qubits=remove_inactive_qubits, eliminate_first_swap=eliminate_first_swap, include_id=include_id, block_form=block_form, use_barriers=use_barriers)
-        depth = len(G)-1
-        return circ, meta, depth 
 
-    def _evaluate_G_list(self, G_list, Nx, Ny, init, measure_y, measure_all_x, remove_inactive_qubits=False, eliminate_first_swap=False, include_id=False, block_form=False, use_barriers=False):
+    def _prepare_circ_from_G(self, G, Nx, Ny, init, measure_y, measure_all_x, remove_inactive_qubits=False,
+                             eliminate_first_swap=False, include_id=False, block_form=False, use_barriers=False):
+        self.lg.debug("Build circuit...")
+        circ, meta = self._cm.build_circuit(G, Nx, Ny, init, measure_y=measure_y, measure_all_x=measure_all_x,
+                                            remove_inactive_qubits=remove_inactive_qubits,
+                                            eliminate_first_swap=eliminate_first_swap, include_id=include_id,
+                                            block_form=block_form, use_barriers=use_barriers)
+        depth = len(G) - 1
+        return circ, meta, depth
+
+    def _evaluate_G_list(self, G_list, Nx, Ny, init, measure_y, measure_all_x, remove_inactive_qubits=False,
+                         eliminate_first_swap=False, include_id=False, block_form=False, use_barriers=False):
         if len(G_list) == 0:
             self.lg.debug("Evaluate empty list of G: skip")
             path_result_dict_list = []
@@ -643,28 +693,33 @@ class QTreeBase(BaseEstimator, ClassifierMixin):
             circ_list = []
             depth_list = []
             for idx, G in enumerate(G_list):
-                self.lg.debug("Prepare {}/{}: G = {}".format(idx+1, len(G_list), G))
-                circ, _, depth = self._prepare_circ_from_G(G, Nx, Ny, init, measure_y=measure_y, measure_all_x=measure_all_x, remove_inactive_qubits=remove_inactive_qubits, eliminate_first_swap=eliminate_first_swap, include_id=include_id, block_form=block_form, use_barriers=use_barriers)
+                self.lg.debug("Prepare {}/{}: G = {}".format(idx + 1, len(G_list), G))
+                circ, _, depth = self._prepare_circ_from_G(G, Nx, Ny, init, measure_y=measure_y,
+                                                           measure_all_x=measure_all_x,
+                                                           remove_inactive_qubits=remove_inactive_qubits,
+                                                           eliminate_first_swap=eliminate_first_swap,
+                                                           include_id=include_id, block_form=block_form,
+                                                           use_barriers=use_barriers)
                 circ_list.append(circ)
-                depth_list.append(depth) 
+                depth_list.append(depth)
             self.lg.debug("Evaluate circuits...")
             path_count_dict_list = self._evaluate_circuits(circ_list, depth_list, Ny, measure_y)
             self.lg.debug("Process circuit evaluation...")
             path_result_dict_list = self._process_path_count_dict_list(path_count_dict_list, Ny, measure_y)
         self.lg.debug("Finished evaluation of list of G")
-        return path_result_dict_list  
-    
+        return path_result_dict_list
+
     def _get_Q(self, path, G, Nx):
         # get feature indices for a single path (see _G_to_features)
-        assert len(G)==len(path)
+        assert len(G) == len(path)
         Q = list(range(Nx))
-        for d,g in enumerate(G):
+        for d, g in enumerate(G):
             if d == 0:
                 index = 0
             else:
                 index = 0
                 for k in range(d):
-                    index += path[k]*2**(d-1-k)
+                    index += path[k] * 2 ** (d - 1 - k)
             gi = g[index]
             q1 = Q[d]
             q2 = Q[gi]
@@ -677,23 +732,24 @@ class QTreeBase(BaseEstimator, ClassifierMixin):
         def get_py_list_exact(path, G, X, y):
             Nx = X.shape[1]
             Ny = y.shape[1]
-            py_list_exact = [np.nan]*Ny
-            py_is_defined = [False]*Ny
-            Q = self._get_Q(path, G, Nx)       
-            idx = np.logical_and.reduce([X[:,q]==p for q, p in zip(Q,path)])
+            py_list_exact = [np.nan] * Ny
+            py_is_defined = [False] * Ny
+            Q = self._get_Q(path, G, Nx)
+            idx = np.logical_and.reduce([X[:, q] == p for q, p in zip(Q, path)])
             if len(idx) == 0:
                 self.lg.debug("!")
             else:
                 for yi in range(Ny):
-                    count0 = np.sum(y[idx,yi]==0)
-                    count1 = np.sum(y[idx,yi]==1)
-                    total_count = (y[idx,yi]).size
-                    assert count0+count1==total_count
+                    count0 = np.sum(y[idx, yi] == 0)
+                    count1 = np.sum(y[idx, yi] == 1)
+                    total_count = (y[idx, yi]).size
+                    assert count0 + count1 == total_count
                     if total_count > 0:
                         py_list_exact[yi] = [count0 / total_count, count1 / total_count]
                         py_is_defined[yi] = True
                     else:
-                        py_list_exact[yi] = [.5, .5] # undefined path (i.e. no samples with this criterion: use random guess)
+                        py_list_exact[yi] = [.5,
+                                             .5]  # undefined path (i.e. no samples with this criterion: use random guess)
                         py_is_defined[yi] = False
             return py_list_exact, py_is_defined
 
@@ -703,69 +759,70 @@ class QTreeBase(BaseEstimator, ClassifierMixin):
             py_list_exact, py_is_defined = get_py_list_exact(path, G, X, y)
             path_result_dict_exact[path] = {'py_list': py_list_exact, 'py_is_defined': py_is_defined}
         return path_result_dict_exact
-    
+
     def _py_list_list_distance(self, py_list_list1, py_list_list2):
         distance_list = []
         for py_list1, py_list2 in zip(py_list_list1, py_list_list2):
             distance_list.append(np.mean([self._dist_func(py1, py2) for py1, py2 in zip(py_list1, py_list2)]))
         return distance_list
-    
+
     def _get_cl_tree(self, tree_dict, y, ct):
         if ct is None:
             ct = ClassicalTree(tree_dict, y_dim=y.shape[1], y=y, logger=self.lg)
         return ct
-    
+
     def _cl_tree_prediction(self, tree_dict, X, y, ct=None, omit_warnings=True):
         ct = self._get_cl_tree(tree_dict, y, ct)
         y_pred = ct.predict(X, omit_warnings=omit_warnings)
         return y_pred
-    
+
     def _cl_tree_prediction_proba(self, tree_dict, X, y, ct=None, omit_warnings=True, verbose=False):
         ct = self._get_cl_tree(tree_dict, y, ct)
-        p_pred = ct.predict_proba(X, omit_warnings=omit_warnings, verbose=verbose)#[:,:,0]
+        p_pred = ct.predict_proba(X, omit_warnings=omit_warnings, verbose=verbose)  # [:,:,0]
         return p_pred
-    
-    def _calc_dist_func(self, py_list_list, py_exact_list_list, p_list):  
+
+    def _calc_dist_func(self, py_list_list, py_exact_list_list, p_list):
         distance_list = self._py_list_list_distance(py_list_list, py_exact_list_list)
         return np.average(distance_list, weights=p_list)
 
     def _calc_score_func(self, S_mean_list, p_list):
-        return np.average(S_mean_list, weights=p_list) 
-    
+        return np.average(S_mean_list, weights=p_list)
+
     def _calc_acc_func(self, y_pred, y_true):
         return self._acc_func(y_pred, y_true)
 
     def _calc_fitness(self, path_result_dict, path_result_dict_exact, y_pred, y_true, d_weight, s_weight, a_weight):
         # remark: paths that are not sampled (i.e., not contained in path_result_dict) do not contribute to the score since they correspond to p(cl)=0 terms
         path_list = path_result_dict.keys()
-        S_mean_list = np.array([np.mean(path_result_dict[path]['S_list']) for path in path_list]) # scores
-        p_list = np.array([path_result_dict[path]['p'] for path in path_list]).ravel() # weights of scores
+        S_mean_list = np.array([np.mean(path_result_dict[path]['S_list']) for path in path_list])  # scores
+        p_list = np.array([path_result_dict[path]['p'] for path in path_list]).ravel()  # weights of scores
         py_list_list = np.array([path_result_dict[path]['py_list'] for path in path_list])
         py_exact_list_list = np.array([path_result_dict_exact[path]['py_list'] for path in path_list])
         # fitness calculation (weight -1 because fitness is maximized)
-        d_fitness = d_weight * -1 * self._calc_dist_func(py_list_list, py_exact_list_list, p_list) # -> minimize
-        s_fitness = s_weight * -1 * self._calc_score_func(S_mean_list, p_list) # -> minimize
-        a_fitness = a_weight * +1 * self._calc_acc_func(y_pred, y_true) # -> maximize
+        d_fitness = d_weight * -1 * self._calc_dist_func(py_list_list, py_exact_list_list, p_list)  # -> minimize
+        s_fitness = s_weight * -1 * self._calc_score_func(S_mean_list, p_list)  # -> minimize
+        a_fitness = a_weight * +1 * self._calc_acc_func(y_pred, y_true)  # -> maximize
         return d_fitness, s_fitness, a_fitness
 
     def _to_tree_dict(self, G, path_result_dict=None):
-        id_key = "C" # controlled swap
-        nt_key = "X" # not - controlled swap - not
-        
+        id_key = "C"  # controlled swap
+        nt_key = "X"  # not - controlled swap - not
+
         # genrate all paths
-        max_n_qubits = np.max([np.max(g) for g in G])+1
+        max_n_qubits = np.max([np.max(g) for g in G]) + 1
         path_code_list = []
         for depth, gate_list in enumerate(G):
-            op_code_list = ["".join(key) for key in product(nt_key+id_key, repeat=depth)]
+            op_code_list = ["".join(key) for key in product(nt_key + id_key, repeat=depth)]
             primary_qubit = depth
-            path_code = [(op_code, primary_qubit, secondary_qubit) for (op_code, secondary_qubit) in zip(op_code_list, gate_list)]
+            path_code = [(op_code, primary_qubit, secondary_qubit) for (op_code, secondary_qubit) in
+                         zip(op_code_list, gate_list)]
             path_code_list.append(path_code)
-        
+
         # follow all valid paths
-        tree_dict = {} 
+        tree_dict = {}
         root = tree_dict
         for path in product(*path_code_list):
-            
+
             # verify path
             valid_path = True
             chosen_op_code = ""
@@ -777,112 +834,125 @@ class QTreeBase(BaseEstimator, ClassifierMixin):
                 chosen_op_code = op_code
             if not valid_path:
                 continue
-            
+
             # construct path
             qubit_order = np.arange(max_n_qubits)
             current_node = root
             for path_step_idx, path_step in enumerate(path):
                 (_, primary_qubit, secondary_qubit) = path_step
-                qubit_order[[primary_qubit, secondary_qubit]] = qubit_order[[secondary_qubit, primary_qubit]]      
+                qubit_order[[primary_qubit, secondary_qubit]] = qubit_order[[secondary_qubit, primary_qubit]]
                 key = qubit_order[primary_qubit]
-                key = int(key) # convert from np.int32 to int
+                key = int(key)  # convert from np.int32 to int
                 if key not in current_node:
-                    current_node[key] = [{}, {}] # 0, 1
+                    current_node[key] = [{}, {}]  # 0, 1
                 if len(chosen_op_code) > path_step_idx:
                     op = chosen_op_code[path_step_idx]
-                    choice = 1 if op == id_key else 0 # op == nt_key
+                    choice = 1 if op == id_key else 0  # op == nt_key
                     current_node = current_node[key][choice]
-                    
+
         # fill tree
         if path_result_dict is not None:
             tree_dict_detailed = copy.deepcopy(tree_dict)
-            
+
             # tree_dict probabilities
-            path_prediction_dict = {path: result['py_list'] for path, result in path_result_dict.items()} # p(y|cl) -> tree_dict
+            path_prediction_dict = {path: result['py_list'] for path, result in
+                                    path_result_dict.items()}  # p(y|cl) -> tree_dict
             for path, py_list in path_prediction_dict.items():
                 current_node = tree_dict
                 for choice in path:
                     current_node = list(current_node.values())[0][choice]
                 current_node[0] = [py[0] for py in py_list]
-                current_node[1] = [py[1] for py in py_list]  
-                
-            # tree_dict probabilities
-            path_prediction_dict = {path: result['py_list'] for path, result in path_result_dict.items()} # p(y|cl) -> tree_dict_detailed
+                current_node[1] = [py[1] for py in py_list]
+
+                # tree_dict probabilities
+            path_prediction_dict = {path: result['py_list'] for path, result in
+                                    path_result_dict.items()}  # p(y|cl) -> tree_dict_detailed
             for path, py_list in path_prediction_dict.items():
                 current_node = tree_dict_detailed
                 for choice in path:
                     current_node = list(current_node.values())[0][choice]
                 current_node['p(y|cl)'] = {0: [py[0] for py in py_list], 1: [py[1] for py in py_list]}
-                
+
             # scores
-            path_prediction_dict = {path: result['S_list'] for path, result in path_result_dict.items()} # S_list -> tree_dict_detailed
+            path_prediction_dict = {path: result['S_list'] for path, result in
+                                    path_result_dict.items()}  # S_list -> tree_dict_detailed
             for path, S_list in path_prediction_dict.items():
                 current_node = tree_dict_detailed
                 for choice in path:
                     current_node = list(current_node.values())[0][choice]
                 current_node['S'] = {'list': S_list, 'mean': np.mean(S_list)}
-                
+
             # data probabilities
-            path_prediction_dict = {path: result['p'] for path, result in path_result_dict.items()} # p(cl) -> tree_dict_detailed
+            path_prediction_dict = {path: result['p'] for path, result in
+                                    path_result_dict.items()}  # p(cl) -> tree_dict_detailed
             for path, p in path_prediction_dict.items():
                 current_node = tree_dict_detailed
                 for choice in path:
                     current_node = list(current_node.values())[0][choice]
                 current_node['p(cl)'] = p
-                
+
             # counts
-            path_prediction_dict = {path: result['N'] for path, result in path_result_dict.items()} # N -> tree_dict_detailed
+            path_prediction_dict = {path: result['N'] for path, result in
+                                    path_result_dict.items()}  # N -> tree_dict_detailed
             for path, N in path_prediction_dict.items():
                 current_node = tree_dict_detailed
                 for choice in path:
                     current_node = list(current_node.values())[0][choice]
-                current_node['N'] = N 
+                current_node['N'] = N
         else:
             tree_dict_detailed = {}
-                    
+
         return tree_dict, tree_dict_detailed, path_result_dict
 
-    def _predict_query(self, G, X, y, query_probabilities, path_result_dict=None, eliminate_first_swap=False, include_id=False, block_form=False, remove_inactive_qubits=False, return_additional_information=False):
+    def _predict_query(self, G, X, y, query_probabilities, path_result_dict=None, eliminate_first_swap=False,
+                       include_id=False, block_form=False, remove_inactive_qubits=False,
+                       return_additional_information=False):
         # alternative prediction method: predict query probability
 
         # perform measurements
         Nx = X.shape[1]
         Ny = y.shape[1]
         if path_result_dict is None:
-            path_result_dict = self._evaluate_G_list([G], Nx, Ny, init=(X, y), measure_y=True, measure_all_x=False, remove_inactive_qubits=remove_inactive_qubits, eliminate_first_swap=eliminate_first_swap, include_id=include_id, block_form=block_form)[0] # optionally calculate
-        path_result_dict_q = self._evaluate_G_list([G], Nx, Ny, init=query_probabilities, measure_y=False, measure_all_x=False, remove_inactive_qubits=remove_inactive_qubits, eliminate_first_swap=eliminate_first_swap, include_id=include_id, block_form=block_form)[0]
-        
+            path_result_dict = self._evaluate_G_list([G], Nx, Ny, init=(X, y), measure_y=True, measure_all_x=False,
+                                                     remove_inactive_qubits=remove_inactive_qubits,
+                                                     eliminate_first_swap=eliminate_first_swap, include_id=include_id,
+                                                     block_form=block_form)[0]  # optionally calculate
+        path_result_dict_q = \
+        self._evaluate_G_list([G], Nx, Ny, init=query_probabilities, measure_y=False, measure_all_x=False,
+                              remove_inactive_qubits=remove_inactive_qubits, eliminate_first_swap=eliminate_first_swap,
+                              include_id=include_id, block_form=block_form)[0]
+
         # accumulate results
         average_py_list = [[] for i in range(self._y.shape[1])]
         for path, path_result in path_result_dict_q.items():
-            p = path_result['p'] # p^q
+            p = path_result['p']  # p^q
             if path in path_result_dict:
-                py_list = path_result_dict[path]['py_list'] # p^hat
+                py_list = path_result_dict[path]['py_list']  # p^hat
             else:
                 py_list = [[.5, .5] for i in range(self._y.shape[1])]
             for i in range(self._y.shape[1]):
-                average_py_list[i].append([ p*py_list[i][0], p*py_list[i][1] ])
-        average_py_list = np.sum(average_py_list,axis=1).tolist()
-        
+                average_py_list[i].append([p * py_list[i][0], p * py_list[i][1]])
+        average_py_list = np.sum(average_py_list, axis=1).tolist()
+
         # return results
         if return_additional_information:
             additional_information = dict(path_result_dict=path_result_dict, path_result_dict_q=path_result_dict_q)
             return additional_information, average_py_list
         else:
             return average_py_list
-    
+
     def _G_to_features(self, G, Nx):
         # TODO: more efficient calculation
         # convert G into feature indices (C to E in paper notation)
-        C = [G[0].copy()] + [[np.nan for _ in range(2**k)] for k in range(1,len(G))]
-        for path in product([0,1], repeat=len(G)):
+        C = [G[0].copy()] + [[np.nan for _ in range(2 ** k)] for k in range(1, len(G))]
+        for path in product([0, 1], repeat=len(G)):
             Q = self._get_Q(path, G, Nx)
-            for d in range(1,len(G)):
+            for d in range(1, len(G)):
                 index = int("".join([str(p) for p in path[:d]]), 2)
                 C[d][index] = Q[d]
         return C
-    
-    
+
+
 class QTree(QTreeBase):
     """Main class for quantum decision classifiers.
     
@@ -893,11 +963,10 @@ class QTree(QTreeBase):
         Maximum depth of the decision tree. A tree of depth 0 consists only of 
         the root.
         
-    quantum_instance : qiskit.utils.QuantumInstance or None
-        Qiskit quantum instance used for all calculations. Can be either a 
+    quantum_backend : qiskit.providers.Backend or None
+        Qiskit quantum backend used for all calculations. Can be either a
         simulator or an actual backend. If set to ``None``, use 
-        ``QuantumInstance(Aer.get_backend('aer_simulator_statevector'))``. 
-        Defaults to ``None``.
+        ``AerSimulator()``. Defaults to ``None``.
         
     d_weight : float
         Hyperparameter of tree growth. Weight of the distance function for 
@@ -1046,82 +1115,87 @@ class QTree(QTreeBase):
         Logger for all output purposes. If ``None``, the default logger is used. 
         Defaults to ``None``.
     """
-    
-    def __init__(self, max_depth, 
-                 quantum_instance=None,
+
+    def __init__(self, max_depth,
+                 quantum_backend=None,
                  d_weight=1.0, s_weight=1.0, a_weight=1.0, pareto_fitness=False,
                  score_func=None, dist_func=None, acc_func=None, swap_func=None, mcswap_func=None, mct_func=None,
                  pop_size=10, cx_pb=.2, mut_pb=.2, mut_ind_pb=.2, select_tournsize=3, max_generations=10,
                  reuse_G_calc=True, mean_fits=True,
                  random_state=None,
                  evo_callback=None,
-                 remove_inactive_qubits=True, eliminate_first_swap=False, simultaneous_circuit_evaluation=False, include_id=False, block_form=False, use_barriers=False,
+                 remove_inactive_qubits=True, eliminate_first_swap=False, simultaneous_circuit_evaluation=False,
+                 include_id=False, block_form=False, use_barriers=False,
                  logger=None):
         #
-        if quantum_instance is None:
-            quantum_instance = QuantumInstance(Aer.get_backend('aer_simulator_statevector'))
+        if quantum_backend is None:
+            quantum_backend = AerSimulator()
         #
         if score_func is None:
             score_func = QTree.score_func_entropy
         if dist_func is None:
-            dist_func = QTree.dist_func_proba_dist_norm 
+            dist_func = QTree.dist_func_proba_dist_norm
         if acc_func is None:
             acc_func = QTree.acc_func_acc_balanced
         #
-        super().__init__(max_depth=max_depth, 
-                 quantum_instance=quantum_instance,
-                 d_weight=d_weight, s_weight=s_weight, a_weight=a_weight, pareto_fitness=pareto_fitness,
-                 score_func=score_func, dist_func=dist_func, acc_func=acc_func, swap_func=swap_func, mcswap_func=mcswap_func, mct_func=mct_func,
-                 pop_size=pop_size, cx_pb=cx_pb, mut_pb=mut_pb, mut_ind_pb=mut_ind_pb, select_tournsize=select_tournsize, max_generations=max_generations,
-                 reuse_G_calc=reuse_G_calc, mean_fits=mean_fits,
-                 random_state=random_state,
-                 evo_callback=evo_callback,
-                 remove_inactive_qubits=remove_inactive_qubits, eliminate_first_swap=eliminate_first_swap, simultaneous_circuit_evaluation=simultaneous_circuit_evaluation, include_id=include_id, block_form=block_form, use_barriers=use_barriers,
-                 logger=logger)
+        super().__init__(max_depth=max_depth,
+                         quantum_backend=quantum_backend,
+                         d_weight=d_weight, s_weight=s_weight, a_weight=a_weight, pareto_fitness=pareto_fitness,
+                         score_func=score_func, dist_func=dist_func, acc_func=acc_func, swap_func=swap_func,
+                         mcswap_func=mcswap_func, mct_func=mct_func,
+                         pop_size=pop_size, cx_pb=cx_pb, mut_pb=mut_pb, mut_ind_pb=mut_ind_pb,
+                         select_tournsize=select_tournsize, max_generations=max_generations,
+                         reuse_G_calc=reuse_G_calc, mean_fits=mean_fits,
+                         random_state=random_state,
+                         evo_callback=evo_callback,
+                         remove_inactive_qubits=remove_inactive_qubits, eliminate_first_swap=eliminate_first_swap,
+                         simultaneous_circuit_evaluation=simultaneous_circuit_evaluation, include_id=include_id,
+                         block_form=block_form, use_barriers=use_barriers,
+                         logger=logger)
 
     @property
     def G(self):
         """list : Raw tree structure.
         """
-        
+
         if hasattr(self, '_G'):
-            return self._G # g ~ c - 1 (paper notation)
+            return self._G  # g ~ c - 1 (paper notation)
         return None
-    
+
     @property
     def X(self):
         """numpy.ndarray : Training data, features.
         """
-        
+
         if hasattr(self, '_X'):
             return self._X
         return None
-    
+
     @property
     def y(self):
         """numpy.ndarray : Training data, labels.
         """
-        
+
         if hasattr(self, '_y'):
             return self._y
         return None
-    
+
     @property
     def tree_dict(self):
         """dict : Tree structure as dictionary containing the class 
         probabilities of each leaf.
         """
-        
+
         if hasattr(self, '_tree_dict'):
             return self._tree_dict
         return None
-    
+
     @property
     def tree_dict_detailed(self):
         """dict : Tree structure as dictionary similar to ``tree_dict`` with 
         more detailed information.
         """
-        
+
         if hasattr(self, '_tree_dict_detailed'):
             return self._tree_dict_detailed
         return None
@@ -1130,25 +1204,25 @@ class QTree(QTreeBase):
     def path_result_dict(self):
         """dict : Tree traversal path summary.
         """
-        
+
         if hasattr(self, '_path_result_dict'):
             return self._path_result_dict
         return None
-    
+
     @property
     def ct(self):
         """ctree.ClassicalTree : Classical tree representation.
         """
-        
+
         if hasattr(self, '_ct'):
             return self._ct
         return None
-    
+
     @property
     def qt(self):
         """qiskit.Circuit : Circuit representation.
         """
-        
+
         try:
             return self.circuit(measure_y=True, measure_all_x=False, return_meta=False, return_depth=False)
         except:
@@ -1162,33 +1236,34 @@ class QTree(QTreeBase):
 
         # shannon information entropy (in bits)
         p0, p1 = py
-        #assert p0+p1==1
+        # assert p0+p1==1
         S = 0
         if p0 > 0:
-            S += -p0*np.log2(p0)
+            S += -p0 * np.log2(p0)
         if p1 > 0:
-            S += -p1*np.log2(p1)
+            S += -p1 * np.log2(p1)
         return S
-    
+
     @staticmethod
     def dist_func_proba_dist_norm(py1, py2):
         """Distance function as argument for ``dist_func`` in ``__init__``.  
         See there for more details.
         """
-        
-        return np.linalg.norm(np.array(py1)-np.array(py2))
-    
+
+        return np.linalg.norm(np.array(py1) - np.array(py2))
+
     @staticmethod
     def acc_func_acc_balanced(y_pred, y_true):
         """Accuracy function as argument for ``acc_func`` in ``__init__``.  
         See there for more details.
         """
-        
+
         y_pred = np.asarray(y_pred)
         y_true = np.asarray(y_true)
         y_dim = y_pred.shape[1]
         assert y_dim == y_true.shape[1]
-        return np.mean([balanced_accuracy_score(y_true[:,d], y_pred[:,d]) for d in range(y_dim)]) # multi-label support: use mean
+        return np.mean([balanced_accuracy_score(y_true[:, d], y_pred[:, d]) for d in
+                        range(y_dim)])  # multi-label support: use mean
 
     def fit(self, X, y):
         """Fit classifier: grow the decision tree using an evolutionary 
@@ -1210,19 +1285,23 @@ class QTree(QTreeBase):
         
         self : returns an instance of self.
         """
-        
+
         X = QTreeBase.check_bool_array(X)
         y = QTreeBase.check_bool_array(y)
         X, y = check_X_y(X, y, multi_output=True)
         self._X = X
-        self._y = y 
+        self._y = y
         assert self.max_depth + 1 <= self._X.shape[1], 'invalid depth for given feature vector'
         self._rng = check_random_state(self.random_state)
-        self.grow(self.d_weight, self.s_weight, self.a_weight, self.pareto_fitness, self.max_depth, self._rng, self.pop_size, self.cx_pb, self.mut_pb, self.mut_ind_pb, self.select_tournsize, self.max_generations, self.reuse_G_calc, self.remove_inactive_qubits, self.eliminate_first_swap, self.include_id, self.block_form, self.use_barriers, self.simultaneous_circuit_evaluation, self.mean_fits)        
-        self._tree_dict, self._tree_dict_detailed, self._path_result_dict = self.to_tree_dict(self.remove_inactive_qubits, self.eliminate_first_swap, self.include_id, self.block_form, self.use_barriers)
+        self.grow(self.d_weight, self.s_weight, self.a_weight, self.pareto_fitness, self.max_depth, self._rng,
+                  self.pop_size, self.cx_pb, self.mut_pb, self.mut_ind_pb, self.select_tournsize, self.max_generations,
+                  self.reuse_G_calc, self.remove_inactive_qubits, self.eliminate_first_swap, self.include_id,
+                  self.block_form, self.use_barriers, self.simultaneous_circuit_evaluation, self.mean_fits)
+        self._tree_dict, self._tree_dict_detailed, self._path_result_dict = self.to_tree_dict(
+            self.remove_inactive_qubits, self.eliminate_first_swap, self.include_id, self.block_form, self.use_barriers)
         self._ct = ClassicalTree(self._tree_dict, y_dim=self._y.shape[1], y=self._y, logger=self.lg)
         return self
-    
+
     def predict(self, X, **kwargs):
         """Make class predictions using a classical representation of the 
         decision tree.
@@ -1244,13 +1323,13 @@ class QTree(QTreeBase):
         y : ndarray of shape (n_samples, n_labels)
             Predicted classes as a binary array.
         """
-        
-        check_is_fitted(self, attributes=['_X', '_y', '_tree_dict'])       
+
+        check_is_fitted(self, attributes=['_X', '_y', '_tree_dict'])
         X = QTree.check_input_features(X, self._X)
         y = self.cl_tree_prediction(X, **kwargs)
         y = QTreeBase.check_bool_array(y)
         return y
-    
+
     def predict_proba(self, X, **kwargs):
         """Make class probability predictions using a classical representation 
         of the decision tree.
@@ -1273,11 +1352,11 @@ class QTree(QTreeBase):
             Predicted class probabilities.
         """
 
-        check_is_fitted(self, attributes=['_X', '_y', '_tree_dict'])       
+        check_is_fitted(self, attributes=['_X', '_y', '_tree_dict'])
         X = QTree.check_input_features(X, self._X)
-        p = self.cl_tree_prediction_proba(X, **kwargs)       
-        return p    
-    
+        p = self.cl_tree_prediction_proba(X, **kwargs)
+        return p
+
     def predict_query(self, query_probabilities):
         """Make class probability predictions using a probabilistic quantum 
         circuit query.
@@ -1299,62 +1378,81 @@ class QTree(QTreeBase):
             Predicted class probabilities as a binary array.
         """
 
-        check_is_fitted(self, attributes=['_X', '_y', '_path_result_dict'])       
-        query_probabilities = QTree.check_query_probabilities(query_probabilities, self._X.shape[1])             
-        y = self.query_prediction(query_probabilities, path_result_dict=self._path_result_dict, eliminate_first_swap=self.eliminate_first_swap, include_id=self.include_id, block_form=self.block_form, remove_inactive_qubits=self.remove_inactive_qubits, return_additional_information=False)
+        check_is_fitted(self, attributes=['_X', '_y', '_path_result_dict'])
+        query_probabilities = QTree.check_query_probabilities(query_probabilities, self._X.shape[1])
+        y = self.query_prediction(query_probabilities, path_result_dict=self._path_result_dict,
+                                  eliminate_first_swap=self.eliminate_first_swap, include_id=self.include_id,
+                                  block_form=self.block_form, remove_inactive_qubits=self.remove_inactive_qubits,
+                                  return_additional_information=False)
         return np.asarray(y).ravel()
 
-    def grow(self, d_weight, s_weight, a_weight, pareto_fitness, max_depth, rng, pop_size, cx_pb, mut_pb, mut_ind_pb, select_tournsize, max_generations, reuse_G_calc, remove_inactive_qubits, eliminate_first_swap, include_id, block_form, use_barriers, simultaneous_circuit_evaluation, mean_fits):
+    def grow(self, d_weight, s_weight, a_weight, pareto_fitness, max_depth, rng, pop_size, cx_pb, mut_pb, mut_ind_pb,
+             select_tournsize, max_generations, reuse_G_calc, remove_inactive_qubits, eliminate_first_swap, include_id,
+             block_form, use_barriers, simultaneous_circuit_evaluation, mean_fits):
         """Grow decision tree. (Advanced functionality.)
         """
-        
-        self._G = self._grow_ga(self._X, self._y, d_weight, s_weight, a_weight, pareto_fitness, max_depth, rng, pop_size, cx_pb, mut_pb, mut_ind_pb, select_tournsize, max_generations, reuse_G_calc, remove_inactive_qubits, eliminate_first_swap, include_id, block_form, use_barriers, simultaneous_circuit_evaluation, mean_fits)
-     
-    def to_tree_dict(self, remove_inactive_qubits=False, eliminate_first_swap=False, include_id=False, block_form=False, use_barriers=False):
+
+        self._G = self._grow_ga(self._X, self._y, d_weight, s_weight, a_weight, pareto_fitness, max_depth, rng,
+                                pop_size, cx_pb, mut_pb, mut_ind_pb, select_tournsize, max_generations, reuse_G_calc,
+                                remove_inactive_qubits, eliminate_first_swap, include_id, block_form, use_barriers,
+                                simultaneous_circuit_evaluation, mean_fits)
+
+    def to_tree_dict(self, remove_inactive_qubits=False, eliminate_first_swap=False, include_id=False, block_form=False,
+                     use_barriers=False):
         """Build tree dict. (Advanced functionality.)
         """
-        
+
         Nx = self._X.shape[1]
         Ny = self._y.shape[1]
         init = (self._X, self._y)
-        path_result_dict = self._evaluate_G_list([self._G], Nx, Ny, init, measure_y=True, measure_all_x=False, remove_inactive_qubits=remove_inactive_qubits, eliminate_first_swap=eliminate_first_swap, include_id=include_id, block_form=block_form, use_barriers=use_barriers)[0]    
+        path_result_dict = self._evaluate_G_list([self._G], Nx, Ny, init, measure_y=True, measure_all_x=False,
+                                                 remove_inactive_qubits=remove_inactive_qubits,
+                                                 eliminate_first_swap=eliminate_first_swap, include_id=include_id,
+                                                 block_form=block_form, use_barriers=use_barriers)[0]
         return self._to_tree_dict(self.G, path_result_dict)
 
     def cl_tree_prediction(self, X, **kwargs):
         """Make class prediction with classical tree representation.
         """
-        
+
         y_pred = self._cl_tree_prediction(self._tree_dict, X, self._y, ct=self._ct, **kwargs)
         return y_pred
-    
+
     def cl_tree_prediction_proba(self, X, **kwargs):
         """Make class probability prediction with classical tree 
         representation.
         """
-        
+
         p_pred = self._cl_tree_prediction_proba(self._tree_dict, X, self._y, ct=self._ct, **kwargs)
         return p_pred
-    
-    def query_prediction(self, query_probabilities, path_result_dict=None, eliminate_first_swap=False, include_id=False, block_form=False, remove_inactive_qubits=False, return_additional_information=False):
+
+    def query_prediction(self, query_probabilities, path_result_dict=None, eliminate_first_swap=False, include_id=False,
+                         block_form=False, remove_inactive_qubits=False, return_additional_information=False):
         """Make class predictions using a probabilistic quantum circuit query. 
         """
-        
-        return self._predict_query(self._G, self._X, self._y, query_probabilities, path_result_dict, eliminate_first_swap, include_id, block_form, remove_inactive_qubits, return_additional_information)
-     
+
+        return self._predict_query(self._G, self._X, self._y, query_probabilities, path_result_dict,
+                                   eliminate_first_swap, include_id, block_form, remove_inactive_qubits,
+                                   return_additional_information)
+
     def G_to_features(self):
         """Extract splitting features from tree structure.
          """
-         
+
         return self._G_to_features(self.G, self._X.shape[1])
-    
+
     def circuit(self, measure_y=True, measure_all_x=False, return_meta=False, return_depth=False):
         """Build circuit representation of the decision tree.
          """
-        
+
         Nx = self._X.shape[1]
-        Ny = self._y.shape[1]        
+        Ny = self._y.shape[1]
         init = (self._X, self._y)
-        circ, meta, depth = self._prepare_circ_from_G(self._G, Nx, Ny, init, measure_y, measure_all_x, remove_inactive_qubits=self.remove_inactive_qubits, eliminate_first_swap=self.eliminate_first_swap, include_id=self.include_id, block_form=self.block_form, use_barriers=self.use_barriers)        
+        circ, meta, depth = self._prepare_circ_from_G(self._G, Nx, Ny, init, measure_y, measure_all_x,
+                                                      remove_inactive_qubits=self.remove_inactive_qubits,
+                                                      eliminate_first_swap=self.eliminate_first_swap,
+                                                      include_id=self.include_id, block_form=self.block_form,
+                                                      use_barriers=self.use_barriers)
         if return_meta and return_depth:
             return circ, meta, depth
         elif return_meta and not return_depth:

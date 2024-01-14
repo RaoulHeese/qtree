@@ -22,7 +22,7 @@ copyright = '2022, Raoul Heese'
 author = 'Raoul Heese'
 
 # The full version, including alpha/beta/rc tags
-release = '1.1'
+release = '1.2'
 
 # -- General configuration ---------------------------------------------------
 
